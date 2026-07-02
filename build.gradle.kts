@@ -84,9 +84,6 @@ tasks {
     project.findProperty("stressTest")?.let { stressTest ->
       systemProperty("io.github.nomisrev.kafka.TEST_ITERATIONS", stressTest)
     }
-    // Guard against any single test hanging (e.g. a producer stuck retrying indefinitely due
-    // to Integer.MAX_VALUE default retries) and taking down the whole build silently.
-    timeout.set(Duration.ofMinutes(5))
     testLogging {
       exceptionFormat = FULL
       events = setOf(SKIPPED, FAILED, STANDARD_ERROR)
