@@ -23,7 +23,7 @@ jobs:
 
       - uses: gradle/gradle-build-action@v3
         with:
-          arguments: build --scan --full-stacktrace
+          arguments: build --scan --full-stacktrace -PTEST_TIMEOUT=2m
 
       - name: Bundle the build report
         if: failure()
