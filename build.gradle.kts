@@ -1,4 +1,5 @@
 import kotlinx.knit.KnitPluginExtension
+import java.time.Duration
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat.*
 import org.gradle.api.tasks.testing.logging.TestLogEvent.FAILED
 import org.gradle.api.tasks.testing.logging.TestLogEvent.SKIPPED
@@ -43,7 +44,7 @@ configure<KnitPluginExtension> {
 
 configure<JavaPluginExtension> {
   toolchain {
-    languageVersion.set(JavaLanguageVersion.of(8))
+    languageVersion.set(JavaLanguageVersion.of(11))
   }
 }
 
@@ -83,6 +84,9 @@ tasks {
     project.findProperty("stressTest")?.let { stressTest ->
       systemProperty("io.github.nomisrev.kafka.TEST_ITERATIONS", stressTest)
     }
+    // Guard against any single test hanging (e.g. a producer stuck retrying indefinitely due
+    // to Integer.MAX_VALUE default retries) and taking down the whole build silently.
+    timeout.set(Duration.ofMinutes(5))
     testLogging {
       exceptionFormat = FULL
       events = setOf(SKIPPED, FAILED, STANDARD_ERROR)

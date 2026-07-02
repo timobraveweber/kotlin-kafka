@@ -1,4 +1,5 @@
-import org.testcontainers.containers.KafkaContainer
+
+import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.utility.DockerImageName
 import java.lang.System.getProperty
 
@@ -25,7 +26,7 @@ import java.lang.System.getProperty
  * @see https://www.testcontainers.org/test_framework_integration/manual_lifecycle_control/
  * @see https://pawelpluta.com/optimise-testcontainers-for-better-tests-performance/
  */
-class Kafka private constructor(imageName: DockerImageName) : KafkaContainer(imageName) {
+class Kafka private constructor(imageName: DockerImageName) : ConfluentKafkaContainer(imageName) {
   
   companion object {
     private val image: DockerImageName =
@@ -33,7 +34,7 @@ class Kafka private constructor(imageName: DockerImageName) : KafkaContainer(ima
         .asCompatibleSubstituteFor("confluentinc/cp-kafka")
       else DockerImageName.parse("confluentinc/cp-kafka:6.2.1")
     
-    val container: KafkaContainer by lazy {
+    val container: ConfluentKafkaContainer by lazy {
       Kafka(image).also { it.start() }
     }
   }

@@ -35,6 +35,7 @@ import org.apache.kafka.common.MetricName
 import org.apache.kafka.common.PartitionInfo
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.Uuid
+import org.apache.kafka.common.metrics.KafkaMetric
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.AfterAll
@@ -76,17 +77,15 @@ abstract class KafkaSpec {
     val kafka: Kafka =
       Kafka().apply {
         withExposedPorts(9092, 9093)
-        withNetworkAliases("broker")
-        withEnv("KAFKA_HOST_NAME", "broker")
         withEnv("KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR", "1")
         withEnv("KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR", "1")
         withEnv(
           "KAFKA_TRANSACTION_ABORT_TIMED_OUT_TRANSACTION_CLEANUP_INTERVAL_MS",
           transactionTimeoutInterval.inWholeMilliseconds.toString()
         )
-        withEnv("KAFKA_AUTHORIZER_CLASS_NAME", "kafka.security.authorizer.AclAuthorizer")
+        // KRaft mode does not support the ZooKeeper-based AclAuthorizer, use the KRaft-native one
+        withEnv("KAFKA_AUTHORIZER_CLASS_NAME", "org.apache.kafka.metadata.authorizer.StandardAuthorizer")
         withEnv("KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND", "true")
-        withReuse(true)
       }
 
     fun KafkaReceiver(): KafkaReceiver<String, String> =
@@ -109,6 +108,12 @@ abstract class KafkaSpec {
       properties = Properties().apply {
         put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 10000.toString())
         put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, 1000.toString())
+        // Bound the total time a batch may be retried (e.g. on repeated, non-recoverable
+        // OUT_OF_ORDER_SEQUENCE_NUMBER errors) so a flaky broker/connection fails the test
+        // quickly instead of retrying with the default of Integer.MAX_VALUE retries and
+        // hanging the whole test run.
+//        put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30000.toString())
+//        put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 10000.toString())
       }
     )
 
@@ -313,16 +318,16 @@ abstract class KafkaSpec {
         override fun beginTransaction() =
           producer.beginTransaction()
 
-        @Suppress("OVERRIDE_DEPRECATION")
-        override fun sendOffsetsToTransaction(
-          offsets: MutableMap<TopicPartition, OffsetAndMetadata>?,
-          consumerGroupId: String?
-        ) = producer.sendOffsetsToTransaction(offsets, ConsumerGroupMetadata(consumerGroupId))
-
         override fun sendOffsetsToTransaction(
           offsets: MutableMap<TopicPartition, OffsetAndMetadata>?,
           groupMetadata: ConsumerGroupMetadata?
         ) = producer.sendOffsetsToTransaction(offsets, groupMetadata)
+
+        override fun registerMetricForSubscription(metric: KafkaMetric) =
+          producer.registerMetricForSubscription(metric)
+
+        override fun unregisterMetricFromSubscription(metric: KafkaMetric) =
+          producer.unregisterMetricFromSubscription(metric)
 
         override fun commitTransaction() =
           producer.commitTransaction()
