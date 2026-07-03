@@ -224,8 +224,8 @@ private class DefaultKafkaPublisher<Key, Value>(
     val completed = withTimeoutOrNull(settings.closeTimeout) {
       runInterruptible(producerContext) {
         p.close(
-          if (settings.closeTimeout.isInfinite()) Duration.ofMillis(Long.MAX_VALUE)
-          else settings.closeTimeout.toJavaDuration()
+          (if (settings.closeTimeout.isInfinite()) Duration.ofMillis(Long.MAX_VALUE)
+          else settings.closeTimeout.toJavaDuration()).coerceIn(Duration.ofSeconds(0), Duration.ofSeconds(30))
         )
       }
     }
