@@ -111,12 +111,14 @@ abstract class KafkaSpec {
             properties = Properties().apply {
                 put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 10000.toString())
                 put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, 1000.toString())
-                // Bound the total time a batch may be retried (e.g. on repeated, non-recoverable
-                // OUT_OF_ORDER_SEQUENCE_NUMBER errors) so a flaky broker/connection fails the test
-                // quickly instead of retrying with the default of Integer.MAX_VALUE retries and
-                // hanging the whole test run.
-//        put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30000.toString())
-//        put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 10000.toString())
+                // Bound the total time a batch may be retried, so a genuinely flaky
+                // broker/connection fails the test quickly instead of retrying with the default
+                // of Integer.MAX_VALUE retries and hanging the whole test run. `awaitTopicReady`
+                // waits for each partition's leader to be locally ready (see its doc for why an
+                // ISR check is used rather than just an elected leader), so this bound is a
+                // safety net rather than a workaround for a known race.
+                put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30000.toString())
+                put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 10000.toString())
             }
         )
 
@@ -233,32 +235,46 @@ abstract class KafkaSpec {
      * configured with unbounded retries, that combination hangs the whole test instead of
      * failing.
      *
-     * To avoid triggering that race altogether, wait until every partition of [topic] has an
-     * elected leader before letting the test publish to it. This mirrors Kafka's own
-     * `TestUtils.waitUntilLeaderIsKnown`, which polls broker-local replica state until a leader
-     * is known. We don't have access to broker internals from an integration test, so we poll
-     * the equivalent externally visible signal via `describeTopics` instead, tolerating the
-     * transient `UnknownTopicOrPartitionException`/`LeaderNotAvailableException` that a topic
-     * can still raise for a short while right after creation, before its metadata has fully
-     * propagated to the broker serving the describe request.
+     * To avoid triggering that race altogether, wait until every partition of [topic] is truly
+     * *locally* ready on its leader broker before letting the test publish to it. This is the
+     * external, black-box equivalent of what Kafka's own broker-internal tests assert directly,
+     * e.g. `replicaManager.onlinePartition(tp).exists(_.leaderLogIfLocal.isDefined)`: the leader
+     * broker has finished `Partition.makeLeader()` and is ready to serve Produce requests for
+     * the partition.
+     *
+     * A naive `partitions().all { it.leader() != null }` check is *not* an equivalent signal:
+     * `describeTopics` answers from the broker's metadata cache, which can report a leader id a
+     * moment before that broker has actually finished `makeLeader()` locally. The in-sync-replica
+     * set, however, is only updated to include the leader *after* `makeLeader()` completes, so
+     * checking that the reported leader is a member of the reported ISR is the externally
+     * observable counterpart of the broker-internal check above, without needing JMX, log
+     * scraping, or a shell into the container. We also tolerate the transient
+     * `UnknownTopicOrPartitionException`/`LeaderNotAvailableException` that a topic can still
+     * raise for a short while right after creation, before its metadata has fully propagated to
+     * the broker serving the describe request.
      */
     private suspend fun Admin.awaitTopicReady(
         topic: NewTopic,
         timeout: kotlin.time.Duration = 10.seconds,
         pollInterval: kotlin.time.Duration = 25.milliseconds,
-    ): Unit = waitUntilTrue(
-        timeout,
-        pollInterval,
-        message = { "Timed out after $timeout waiting for partition leaders to be elected for topic ${topic.name()}" }
     ) {
-        val partitions = try {
-            describeTopic(topic.name())?.partitions().orEmpty()
-        } catch (_: UnknownTopicOrPartitionException) {
-            emptyList()
-        } catch (_: LeaderNotAvailableException) {
-            emptyList()
+        waitUntilTrue(
+            timeout,
+            pollInterval,
+            message = { "Timed out after $timeout waiting for leaders to be locally ready for topic ${topic.name()}" }
+        ) {
+            val partitions = try {
+                describeTopic(topic.name())?.partitions().orEmpty()
+            } catch (_: UnknownTopicOrPartitionException) {
+                emptyList()
+            } catch (_: LeaderNotAvailableException) {
+                emptyList()
+            }
+            partitions.size == topic.numPartitions() && partitions.all { partition ->
+                val leader = partition.leader()
+                leader != null && partition.isr().any { replica -> replica.id() == leader.id() }
+            }
         }
-        partitions.size == topic.numPartitions() && partitions.all { it.leader() != null }
     }
 
     object Boom : RuntimeException("Boom!") {
