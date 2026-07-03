@@ -240,33 +240,35 @@ class KafkaPublisherSpec : KafkaSpec() {
       put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true")
     }
     val records1 = produce(0..4)
-    val publisher1 = KafkaPublisher(settings)
-    publisher1.publishScope {
-      transaction {
-        publish(records1)
-      }
-    }
-
-    val records2 = produce(5..9)
-    val publisher2 = KafkaPublisher(settings)
-    publisher2.publishScope {
-      transaction {
-        publish(records2)
-      }
-    }
-
-    // publisher1 was previous transactional.id, will result in fatal ProducerFencedException
-    val records3 = produce(10..14)
-    assertThrows<ProducerFencedException> {
+    KafkaPublisher(settings).use { publisher1 ->
       publisher1.publishScope {
         transaction {
-          publishCatching(records3)
+          publish(records1)
         }
       }
-    }
 
-    // Due to ProducerFencedException, only records1 and records2 are received
-    topic.assertHasRecords(records1 + records2)
+      val records2 = produce(5..9)
+      KafkaPublisher(settings).use { publisher2 ->
+        publisher2.publishScope {
+          transaction {
+            publish(records2)
+          }
+        }
+      }
+
+      // publisher1 was previous transactional.id, will result in fatal ProducerFencedException
+      val records3 = produce(10..14)
+      assertThrows<ProducerFencedException> {
+        publisher1.publishScope {
+          transaction {
+            publishCatching(records3)
+          }
+        }
+      }
+
+      // Due to ProducerFencedException, only records1 and records2 are received
+      topic.assertHasRecords(records1 + records2)
+    }
   }
 
   @Test
