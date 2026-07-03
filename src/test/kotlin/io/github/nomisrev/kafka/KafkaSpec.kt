@@ -13,11 +13,14 @@ import io.github.nomisRev.kafka.receiver.AutoOffsetReset
 import io.github.nomisRev.kafka.receiver.KafkaReceiver
 import io.github.nomisRev.kafka.receiver.ReceiverSettings
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.count
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.clients.admin.AdminClientConfig
@@ -49,6 +52,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -180,12 +184,51 @@ abstract class KafkaSpec {
         val topic = NewTopic(nextTopicName(), partitions, replicationFactor).configs(topicConfig)
         admin {
             createTopic(topic)
+            awaitTopicReady(topic)
             try {
                 TopicTestScope(topic, this@runTest).test(topic)
             } finally {
                 topic.shouldBeEmpty()
                 deleteTopic(topic.name())
             }
+        }
+    }
+
+    /**
+     * Right after a topic is created, its partitions may not have an elected leader yet
+     * (especially against a freshly started, single-node KRaft cluster). Producing to such a
+     * partition fails with `NOT_LEADER_OR_FOLLOWER`, and once an idempotent producer retries
+     * after refreshing metadata, it can subsequently hit an unrecoverable
+     * `OUT_OF_ORDER_SEQUENCE_NUMBER` on that same partition/producer-epoch. Since producers are
+     * configured with unbounded retries, that combination hangs the whole test instead of
+     * failing.
+     *
+     * To avoid triggering that race altogether, wait until every partition of [topic] has an
+     * elected leader before letting the test publish to it.
+     */
+    private suspend fun Admin.awaitTopicReady(
+        topic: NewTopic,
+        timeout: kotlin.time.Duration = 10.seconds,
+        pollInterval: kotlin.time.Duration = 25.milliseconds,
+    ) {
+        // Under `runTest`, `delay` advances a *virtual* clock rather than waiting in real
+        // wall-clock time. Since we're polling for something that only progresses in real time
+        // (the broker electing partition leaders), we need to opt out of the virtual clock here,
+        // otherwise `timeout` elapses virtually almost instantly, well before the broker has had
+        // any real time to elect a leader.
+        val ready = withContext(Dispatchers.IO) {
+            withTimeoutOrNull(timeout) {
+                while (true) {
+                    val partitions = describeTopic(topic.name())?.partitions().orEmpty()
+                    val allLeadersElected =
+                        partitions.size == topic.numPartitions() && partitions.all { it.leader() != null }
+                    if (allLeadersElected) break
+                    delay(pollInterval)
+                }
+            }
+        }
+        checkNotNull(ready) {
+            "Timed out after $timeout waiting for partition leaders to be elected for topic ${topic.name()}"
         }
     }
 
