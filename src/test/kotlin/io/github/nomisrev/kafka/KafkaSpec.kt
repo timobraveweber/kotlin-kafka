@@ -28,6 +28,8 @@ import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.producer.Callback
+import org.apache.kafka.common.errors.LeaderNotAvailableException
+import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.clients.producer.ProducerConfig
@@ -195,6 +197,34 @@ abstract class KafkaSpec {
     }
 
     /**
+     * Coroutine-friendly counterpart to Kafka's own `kafka.utils.TestUtils.waitUntilTrue`:
+     * repeatedly evaluate [condition] until it returns `true`, or fail with [message] once
+     * [timeout] elapses.
+     *
+     * Under `runTest`, `delay` advances a *virtual* clock rather than waiting in real wall-clock
+     * time. Since callers typically poll for something that only progresses in real time (e.g.
+     * the broker electing partition leaders), we opt out of the virtual clock here, otherwise
+     * [timeout] elapses virtually almost instantly, well before anything has had real time to
+     * happen.
+     */
+    private suspend fun waitUntilTrue(
+        timeout: kotlin.time.Duration = 10.seconds,
+        pollInterval: kotlin.time.Duration = 25.milliseconds,
+        message: () -> String,
+        condition: suspend () -> Boolean,
+    ) {
+        val success = withContext(Dispatchers.IO) {
+            withTimeoutOrNull(timeout) {
+                while (!condition()) {
+                    delay(pollInterval)
+                }
+                true
+            }
+        }
+        requireNotNull(success, message)
+    }
+
+    /**
      * Right after a topic is created, its partitions may not have an elected leader yet
      * (especially against a freshly started, single-node KRaft cluster). Producing to such a
      * partition fails with `NOT_LEADER_OR_FOLLOWER`, and once an idempotent producer retries
@@ -204,32 +234,31 @@ abstract class KafkaSpec {
      * failing.
      *
      * To avoid triggering that race altogether, wait until every partition of [topic] has an
-     * elected leader before letting the test publish to it.
+     * elected leader before letting the test publish to it. This mirrors Kafka's own
+     * `TestUtils.waitUntilLeaderIsKnown`, which polls broker-local replica state until a leader
+     * is known. We don't have access to broker internals from an integration test, so we poll
+     * the equivalent externally visible signal via `describeTopics` instead, tolerating the
+     * transient `UnknownTopicOrPartitionException`/`LeaderNotAvailableException` that a topic
+     * can still raise for a short while right after creation, before its metadata has fully
+     * propagated to the broker serving the describe request.
      */
     private suspend fun Admin.awaitTopicReady(
         topic: NewTopic,
         timeout: kotlin.time.Duration = 10.seconds,
         pollInterval: kotlin.time.Duration = 25.milliseconds,
+    ): Unit = waitUntilTrue(
+        timeout,
+        pollInterval,
+        message = { "Timed out after $timeout waiting for partition leaders to be elected for topic ${topic.name()}" }
     ) {
-        // Under `runTest`, `delay` advances a *virtual* clock rather than waiting in real
-        // wall-clock time. Since we're polling for something that only progresses in real time
-        // (the broker electing partition leaders), we need to opt out of the virtual clock here,
-        // otherwise `timeout` elapses virtually almost instantly, well before the broker has had
-        // any real time to elect a leader.
-        val ready = withContext(Dispatchers.IO) {
-            withTimeoutOrNull(timeout) {
-                while (true) {
-                    val partitions = describeTopic(topic.name())?.partitions().orEmpty()
-                    val allLeadersElected =
-                        partitions.size == topic.numPartitions() && partitions.all { it.leader() != null }
-                    if (allLeadersElected) break
-                    delay(pollInterval)
-                }
-            }
+        val partitions = try {
+            describeTopic(topic.name())?.partitions().orEmpty()
+        } catch (_: UnknownTopicOrPartitionException) {
+            emptyList()
+        } catch (_: LeaderNotAvailableException) {
+            emptyList()
         }
-        checkNotNull(ready) {
-            "Timed out after $timeout waiting for partition leaders to be elected for topic ${topic.name()}"
-        }
+        partitions.size == topic.numPartitions() && partitions.all { it.leader() != null }
     }
 
     object Boom : RuntimeException("Boom!") {
