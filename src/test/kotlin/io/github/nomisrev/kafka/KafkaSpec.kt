@@ -112,14 +112,6 @@ abstract class KafkaSpec {
             properties = Properties().apply {
                 put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 10000.toString())
                 put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, 1000.toString())
-                // Bound the total time a batch may be retried, so a genuinely flaky
-                // broker/connection fails the test quickly instead of retrying with the default
-                // of Integer.MAX_VALUE retries and hanging the whole test run. `awaitTopicReady`
-                // waits for each partition's leader to be locally ready (see its doc for why an
-                // ISR check is used rather than just an elected leader), so this bound is a
-                // safety net rather than a workaround for a known race.
-                put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30000.toString())
-                put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 10000.toString())
             }
         )
 
