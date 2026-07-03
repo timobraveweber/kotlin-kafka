@@ -22,7 +22,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -36,7 +35,6 @@ import java.time.Duration
 import java.util.concurrent.Executors
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.toJavaDuration
-import kotlin.time.toKotlinDuration
 
 /**
  * Constructing a [KafkaPublisher] requires [PublisherSettings].
@@ -196,47 +194,16 @@ private class DefaultKafkaPublisher<Key, Value>(
   }
 
   override fun close() = runBlocking {
-    val p = producer.await()
     listOf(
-      runCatching { settings.producerListener.producerRemoved(producerId, p) },
-      runCatching { closeProducer(p) },
-      runCatching { producerContext.close() }
-    ).throwIfErrors()
-  }
-
-  /**
-   * Closes [p], honouring [PublisherSettings.closeTimeout] but never for longer than
-   * [HARD_CLOSE_TIMEOUT], regardless of what the caller configured (including the default of
-   * [kotlin.time.Duration.INFINITE]).
-   *
-   * [Producer.close] is invoked through [runInterruptible] on [producerContext], the single
-   * dedicated (daemon) thread also used for every other producer operation. Without a hard
-   * ceiling here, a wedged in-flight send (e.g. a broker that never responds) can keep that
-   * thread parked inside `close(Duration)` for as long as the caller's timeout allows, which by
-   * default is forever: `close()`/`use {}` would then never return, no matter that the thread
-   * itself is a daemon and wouldn't otherwise block JVM exit. Bounding the wait, and racing it
-   * with [withTimeoutOrNull], guarantees [close] always returns in bounded time; if the producer
-   * is still stuck once the bound elapses, we abandon that attempt (the coroutine is cancelled,
-   * interrupting the thread) and issue a best-effort immediate close to drop any remaining
-   * in-flight records rather than risk leaking the wait indefinitely.
-   */
-  private suspend fun closeProducer(p: Producer<Key, Value>) {
-    val completed = withTimeoutOrNull(settings.closeTimeout) {
-      runInterruptible(producerContext) {
-        p.close(
+      runCatching { settings.producerListener.producerRemoved(producerId, producer.await()) },
+      runCatching {
+        producer.await().close(
           if (settings.closeTimeout.isInfinite()) Duration.ofMillis(Long.MAX_VALUE)
           else settings.closeTimeout.toJavaDuration()
         )
-      }
-    }
-    if (completed == null) {
-      log.warn(
-        "Producer {} failed to close within {}, forcing an immediate close instead of waiting indefinitely",
-        producerId,
-        settings.closeTimeout
-      )
-      p.close(Duration.ZERO)
-    }
+      },
+      runCatching { producerContext.close() }
+    ).throwIfErrors()
   }
 
   companion object {
