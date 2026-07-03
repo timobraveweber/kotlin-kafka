@@ -221,30 +221,20 @@ private class DefaultKafkaPublisher<Key, Value>(
    * in-flight records rather than risk leaking the wait indefinitely.
    */
   private suspend fun closeProducer(p: Producer<Key, Value>) {
-    val requested =
-      if (settings.closeTimeout.isInfinite()) Duration.ofMillis(Long.MAX_VALUE)
-      else settings.closeTimeout.toJavaDuration()
-    val bounded = if (requested > HARD_CLOSE_TIMEOUT) HARD_CLOSE_TIMEOUT else requested
-    val completed = withTimeoutOrNull(bounded.toKotlinDuration()) {
-      runInterruptible(producerContext) { p.close(bounded) }
+    val completed = withTimeoutOrNull(settings.closeTimeout) {
+      runInterruptible(producerContext) { p.close(settings.closeTimeout.toJavaDuration()) }
     }
     if (completed == null) {
       log.warn(
         "Producer {} failed to close within {}, forcing an immediate close instead of waiting indefinitely",
         producerId,
-        bounded
+        settings.closeTimeout
       )
       p.close(Duration.ZERO)
     }
   }
 
   companion object {
-    /**
-     * Absolute upper bound on how long [close] will wait for the underlying [Producer] to close,
-     * no matter how [PublisherSettings.closeTimeout] is configured by the caller.
-     */
-    private val HARD_CLOSE_TIMEOUT: Duration = Duration.ofSeconds(30)
-
     val log: Logger = LoggerFactory.getLogger(KafkaPublisher::class.java.name)
   }
 }
