@@ -222,7 +222,12 @@ private class DefaultKafkaPublisher<Key, Value>(
    */
   private suspend fun closeProducer(p: Producer<Key, Value>) {
     val completed = withTimeoutOrNull(settings.closeTimeout) {
-      runInterruptible(producerContext) { p.close(settings.closeTimeout.toJavaDuration()) }
+      runInterruptible(producerContext) {
+        p.close(
+          if (settings.closeTimeout.isInfinite()) Duration.ofMillis(Long.MAX_VALUE)
+          else settings.closeTimeout.toJavaDuration()
+        )
+      }
     }
     if (completed == null) {
       log.warn(
