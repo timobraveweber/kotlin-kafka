@@ -89,7 +89,7 @@ abstract class KafkaSpec {
                 // KRaft mode does not support the ZooKeeper-based AclAuthorizer, use the KRaft-native one
                 withEnv("KAFKA_AUTHORIZER_CLASS_NAME", "org.apache.kafka.metadata.authorizer.StandardAuthorizer")
                 withEnv("KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND", "true")
-//                withReuse(true)
+                withReuse(true)
             }
 
         fun KafkaReceiver(): KafkaReceiver<String, String> =

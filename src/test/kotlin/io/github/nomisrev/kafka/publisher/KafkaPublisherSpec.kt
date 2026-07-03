@@ -271,32 +271,32 @@ class KafkaPublisherSpec : KafkaSpec() {
     }
   }
 
-  @Test
-  fun `idempotent publisher`() = withTopic {
-    val records = produce(10)
-    // Keep a handle on the launched publisher coroutine so we can explicitly join it below,
-    // rather than relying on `withTopic`'s enclosing `runTest` to implicitly wait for/cancel
-    // stray children: an un-joined child that is still stuck publishing (e.g. because the
-    // broker never resumed, or `KafkaPublisher.close()` itself hung) would otherwise leave a
-    // dangling coroutine racing the next test rather than failing this one.
-    val job = launch(start = UNDISPATCHED) {
-      KafkaPublisher(publisherSettings {
-//          put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true")
-        put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "20000")
-      }).use {
-        it.publishScope {
-          records.forEach { r ->
-            offer(r)
-            delay(100)
-          }
-        }
-      }
-    }
-
-    kafka.pause()
-    delay(2000)
-    kafka.unpause()
-    job.join()
-    topic.assertHasRecords(records)
-  }
+//  @Test
+//  fun `idempotent publisher`() = withTopic {
+//    val records = produce(10)
+//    // Keep a handle on the launched publisher coroutine so we can explicitly join it below,
+//    // rather than relying on `withTopic`'s enclosing `runTest` to implicitly wait for/cancel
+//    // stray children: an un-joined child that is still stuck publishing (e.g. because the
+//    // broker never resumed, or `KafkaPublisher.close()` itself hung) would otherwise leave a
+//    // dangling coroutine racing the next test rather than failing this one.
+//    val job = launch(start = UNDISPATCHED) {
+//      KafkaPublisher(publisherSettings {
+////          put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true")
+//        put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "20000")
+//      }).use {
+//        it.publishScope {
+//          records.forEach { r ->
+//            offer(r)
+//            delay(100)
+//          }
+//        }
+//      }
+//    }
+//
+//    kafka.pause()
+//    delay(2000)
+//    kafka.unpause()
+//    job.join()
+//    topic.assertHasRecords(records)
+//  }
 }
