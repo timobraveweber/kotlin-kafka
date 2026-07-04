@@ -57,6 +57,9 @@ import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+private val testIterations: Int =
+  System.getProperties().getProperty("io.github.nomisrev.kafka.TEST_ITERATIONS")?.toIntOrNull() ?: 1
+
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 abstract class KafkaSpec {
 
@@ -80,6 +83,8 @@ abstract class KafkaSpec {
     val kafka: Kafka =
       Kafka().apply {
         withExposedPorts(9092, 9093)
+        withNetworkAliases("broker")
+        withEnv("KAFKA_HOST_NAME", "broker")
         withEnv("KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR", "1")
         withEnv("KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR", "1")
         withEnv(
@@ -143,10 +148,7 @@ abstract class KafkaSpec {
         properties()
         put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, publisherSettings.bootstrapServers)
         put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, publisherSettings.keySerializer::class.qualifiedName)
-        put(
-          ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-          publisherSettings.valueSerializer::class.qualifiedName
-        )
+        put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, publisherSettings.valueSerializer::class.qualifiedName)
         put(ProducerConfig.ACKS_CONFIG, acknowledgments.value)
       }
     )
