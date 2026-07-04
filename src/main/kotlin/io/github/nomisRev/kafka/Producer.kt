@@ -28,7 +28,7 @@ import org.apache.kafka.common.serialization.Serializer
   You can use `Flow.catch` to handle any errors, to prevent the flow from being cancelled.
   Or, use [Flow.produce] to send records, and receive `Result<Throwable>` instead of using `Flow.catch`.
   
-  This will be removed in 1.0.0.
+  This will be removed in latest 1.0.0.
 """,
   ReplaceWith(
     "produceOrThrow(settings.toPublisherSettings())",
