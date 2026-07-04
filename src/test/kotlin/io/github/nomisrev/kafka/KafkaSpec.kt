@@ -389,9 +389,9 @@ abstract class KafkaSpec {
         override fun clientInstanceId(p0: Duration?): Uuid =
           producer.clientInstanceId(p0)
 
-        override fun close() {}
+        override fun close() = producer.close()
 
-        override fun close(timeout: Duration?) {}
+        override fun close(timeout: Duration?) = producer.close(timeout)
 
         override fun initTransactions() =
           producer.initTransactions()
