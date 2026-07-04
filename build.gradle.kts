@@ -22,7 +22,6 @@ repositories {
 group = "io.github.nomisrev"
 
 dependencies {
-  api(libs.kotlin.stdlib)
   api(libs.kotlinx.coroutines.core)
   api(libs.kafka.clients)
   implementation(libs.slf4j.api)
