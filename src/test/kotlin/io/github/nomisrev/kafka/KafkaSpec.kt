@@ -183,7 +183,7 @@ abstract class KafkaSpec {
     val topic = NewTopic(nextTopicName(), partitions, replicationFactor).configs(topicConfig)
     admin {
       createTopic(topic)
-//      awaitTopicReady(topic)
+      awaitTopicReady(topic)
       try {
         TopicTestScope(topic, this@runTest).test(topic)
       } finally {
