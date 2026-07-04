@@ -144,7 +144,7 @@ abstract class KafkaSpec {
     val publisherSettings = publisherSettings()
     return publisherSettings().copy(
       acknowledgments = acknowledgments,
-      properties = Properties().apply {
+      properties = Properties(publisherSettings.properties).apply {
         properties()
         put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, publisherSettings.bootstrapServers)
         put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, publisherSettings.keySerializer::class.qualifiedName)
