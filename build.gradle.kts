@@ -84,6 +84,9 @@ tasks {
     project.findProperty("stressTest")?.let { stressTest ->
       systemProperty("io.github.nomisrev.kafka.TEST_ITERATIONS", stressTest)
     }
+    project.findProperty("TEST_TIMEOUT")?.let { testTimeout ->
+      systemProperty("kotlinx.coroutines.test.default_timeout", testTimeout)
+    }
     testLogging {
       exceptionFormat = FULL
       events = setOf(SKIPPED, FAILED, STANDARD_ERROR)
