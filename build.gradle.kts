@@ -52,6 +52,7 @@ kotlin {
   compilerOptions {
     languageVersion.set(KotlinVersion.KOTLIN_2_2)
     apiVersion.set(KotlinVersion.KOTLIN_2_2)
+    freeCompilerArgs.addAll("-Xreturn-value-checker=full", "-Xname-based-destructuring=complete")
   }
 }
 

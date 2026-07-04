@@ -93,12 +93,12 @@ internal class CommittableBatch {
   fun getAndClearOffsets(): CommitArgs {
     val offsetMap: MutableMap<TopicPartition, OffsetAndMetadata> = HashMap()
     if (outOfOrderCommits) {
-      deferred.forEach { (tp: TopicPartition, offsets: MutableList<Long>) ->
-        if (offsets.size > 0) {
+      deferred.forEach { [tp: TopicPartition, offsets: MutableList<Long>] ->
+        if (offsets.isNotEmpty()) {
           offsets.sort()
           val uncomittedThisPart: MutableList<Long> = uncommitted[tp]!!
           var lastThisPart: Long = -1
-          while (offsets.size > 0 && offsets[0] == uncomittedThisPart[0]) {
+          while (offsets.isNotEmpty() && offsets[0] == uncomittedThisPart[0]) {
             lastThisPart = offsets[0]
             offsets.removeAt(0)
             uncomittedThisPart.removeAt(0)
@@ -132,13 +132,13 @@ internal class CommittableBatch {
   fun restoreOffsets(commitArgs: CommitArgs, restoreCallbackEmitters: Boolean) {
     // Restore offsets that haven't been updated.
     if (outOfOrderCommits) {
-      commitArgs.offsets.forEach { (tp: TopicPartition, offset: OffsetAndMetadata) ->
+      commitArgs.offsets.forEach { [tp: TopicPartition, offset: OffsetAndMetadata] ->
         deferred[tp]!!
           .add(0, offset.offset() - 1)
         uncommitted[tp]!!.add(0, offset.offset() - 1)
       }
     } else {
-      commitArgs.offsets.forEach { (topicPart, value) ->
+      commitArgs.offsets.forEach { [topicPart, value] ->
         val offset = value.offset()
         val latestOffset = latestOffsets[topicPart]
         if (latestOffset == null || latestOffset <= offset - 1) consumedOffsets.putIfAbsent(topicPart, offset - 1)

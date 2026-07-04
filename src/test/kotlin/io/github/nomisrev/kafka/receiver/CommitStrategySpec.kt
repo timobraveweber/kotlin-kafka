@@ -12,7 +12,7 @@ class CommitStrategySpec {
   @Test
   fun `Negative or zero sized BySize strategy fails`() = runBlocking<Unit> {
     val actual = assertThrows<IllegalArgumentException> {
-      CommitStrategy.BySize(0)
+      val _ = CommitStrategy.BySize(0)
     }.message
     assertEquals(
       "Size based auto-commit requires positive non-zero commit batch size but found 0",
@@ -23,7 +23,7 @@ class CommitStrategySpec {
   @Test
   fun `Negative or zero sized BySizeOrTime strategy fails`() = runBlocking<Unit> {
     val actual = assertThrows<IllegalArgumentException> {
-      CommitStrategy.BySizeOrTime(0, 1.seconds)
+      val _ = CommitStrategy.BySizeOrTime(0, 1.seconds)
     }.message
     assertEquals(
       "Size based auto-commit requires positive non-zero commit batch size but found 0",
@@ -34,7 +34,7 @@ class CommitStrategySpec {
   @Test
   fun `Negative or zero duration BySizeOrTime strategy fails`() = runBlocking<Unit> {
     val actual = assertThrows<IllegalArgumentException> {
-      CommitStrategy.BySizeOrTime(1, 0.seconds)
+      val _ = CommitStrategy.BySizeOrTime(1, 0.seconds)
     }.message
     assertEquals(
       "Time based auto-commit requires positive non-zero interval but found ${0.seconds}",
@@ -45,7 +45,7 @@ class CommitStrategySpec {
   @Test
   fun `Negative or zero duration ByTime strategy fails`() = runBlocking<Unit> {
     val actual = assertThrows<IllegalArgumentException> {
-      CommitStrategy.ByTime(0.seconds)
+      val _ = CommitStrategy.ByTime(0.seconds)
     }.message
     assertEquals(
       "Time based auto-commit requires positive non-zero interval but found ${0.seconds}",

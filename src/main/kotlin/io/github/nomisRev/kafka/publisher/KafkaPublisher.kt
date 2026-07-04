@@ -1,6 +1,5 @@
 package io.github.nomisRev.kafka.publisher
 
-import io.github.nomisRev.kafka.KafkaProducer
 import io.github.nomisRev.kafka.publisher.DefaultKafkaPublisher.Companion.log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CopyableThrowable
@@ -126,6 +125,7 @@ public interface KafkaPublisher<Key, Value> : AutoCloseable {
    * }
    * ```
    */
+  @IgnorableReturnValue
   public suspend fun <A> publishScope(block: suspend TransactionalScope<Key, Value>.() -> A): A
 
   /** @see KafkaProducer.partitionsFor */
@@ -345,7 +345,7 @@ private val ASSERTIONS_ENABLED = ChildCancelScope::class.java.desiredAssertionSt
 
 private val DEBUG = try {
   System.getProperty(DEBUG_PROPERTY_NAME)
-} catch (e: SecurityException) {
+} catch (_: SecurityException) {
   null
 }.let { value ->
   when (value) {

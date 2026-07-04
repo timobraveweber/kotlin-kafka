@@ -141,7 +141,7 @@ private fun <Key, Value> Flow<ProducerRecord<Key, Value>>.produceImpl(
   stopOnError: Boolean,
   onPublisherRecordDropped: (suspend (Logger, ProducerRecord<Key, Value>) -> Unit)?,
   createProducer: (suspend (PublisherSettings<Key, Value>) -> Producer<Key, Value>)?
-): Flow<Result<RecordMetadata>> = channelFlow<Result<RecordMetadata>> {
+): Flow<Result<RecordMetadata>> = channelFlow {
   val producerId = "reactor-kafka-sender-${System.identityHashCode(this)}"
   val inFlight = AtomicInteger(0)
   val delayedThrowable = AtomicReference<List<Throwable>>(emptyList())

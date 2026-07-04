@@ -84,7 +84,7 @@ public fun <K, V> KafkaProducer(setting: ProducerSettings<K, V>): KafkaProducer<
 public fun <K, V> kafkaProducer(
   setting: ProducerSettings<K, V>,
 ): Flow<KafkaProducer<K, V>> = flow {
-  KafkaProducer(setting).asFlow()
+  emit(KafkaProducer(setting))
 }
 
 @Deprecated(
