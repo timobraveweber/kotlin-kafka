@@ -4,7 +4,7 @@ import org.gradle.api.tasks.testing.logging.TestLogEvent.FAILED
 import org.gradle.api.tasks.testing.logging.TestLogEvent.SKIPPED
 import org.gradle.api.tasks.testing.logging.TestLogEvent.STANDARD_ERROR
 import org.jetbrains.dokka.gradle.DokkaTask
-import org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_0
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
   alias(libs.plugins.kotlin.jvm)
@@ -22,9 +22,7 @@ repositories {
 group = "io.github.nomisrev"
 
 dependencies {
-  api(libs.kotlin.stdlib)
   api(libs.kotlinx.coroutines.core)
-  api(libs.kotlinx.coroutines.jdk8)
   api(libs.kafka.clients)
   implementation(libs.slf4j.api)
 
@@ -39,10 +37,6 @@ powerAssert {
   functions = listOf("kotlin.test.assertEquals")
 }
 
-//configure<PowerAssertGradleExtension> {
-//  functions = listOf("kotlin.test.assertEquals")
-//}
-
 configure<KnitPluginExtension> {
   siteRoot = "https://nomisrev.github.io/kotlin-kafka/"
 }
@@ -56,8 +50,8 @@ configure<JavaPluginExtension> {
 kotlin {
   explicitApi()
   compilerOptions {
-    languageVersion.set(KOTLIN_2_0)
-    apiVersion.set(KOTLIN_2_0)
+    languageVersion.set(KotlinVersion.KOTLIN_2_2)
+    apiVersion.set(KotlinVersion.KOTLIN_2_2)
   }
 }
 
@@ -86,8 +80,8 @@ tasks {
   withType<Test>().configureEach {
     useJUnitPlatform()
     maxParallelForks = (2 * Runtime.getRuntime().availableProcessors())
-    if (project.hasProperty("stressTest")) {
-      systemProperty("io.github.nomisrev.kafka.TEST_ITERATIONS", project.properties["stressTest"] ?: 100)
+    project.findProperty("stressTest")?.let { stressTest ->
+      systemProperty("io.github.nomisrev.kafka.TEST_ITERATIONS", stressTest)
     }
     testLogging {
       exceptionFormat = FULL

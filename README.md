@@ -20,12 +20,10 @@ Some important aspects of Kafka are tricky to implement with the "low-level" Kaf
 especially properly streaming records from Kafka and correctly committing them.
 Additional complexity is involved in this process, more details [here](https://tuleism.github.io/blog/2021/parallel-backpressured-kafka-consumer/).
 
-To solve these problems a couple of projects in the JVM already exist:
+To solve these problems, a couple of projects in the JVM already exist:
  - [Alpakka Kafka](https://github.com/akka/alpakka-kafka)
- - [reactor-kafka](https://github.com/reactor/reactor-kafka)
-
-There was no implementation for KotlinX Coroutines Flow,
-you can however quite easily use reactor-kafka with [KotlinX Coroutines Reactor bindings](https://github.com/Kotlin/kotlinx.coroutines/blob/master/reactive/kotlinx-coroutines-reactor/README.md).
+ - [reactor-kafka](https://github.com/reactor/reactor-kafka) - now deprecated
+ - [fs2-kafka](https://github.com/typelevel/fs2-kafka)
 
 This project implements the same strategies as [reactor-kafka] directly on top of KotlinX Coroutines to benefit from **all** their benefits,
 and to open the door to potentially becoming a Kotlin MPP library in the future.
