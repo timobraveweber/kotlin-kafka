@@ -35,5 +35,6 @@ public enum class Acks(public val value: String) {
    * Alias to all
    * @see All
    */
+  @Deprecated("Use Acks.All", ReplaceWith("Acks.All"))
   MinusOne("-1"),
 }

@@ -14,6 +14,7 @@ inline fun <A, B> Flow<A>.mapIndexed(
   }
 }
 
+@IgnorableReturnValue
 inline fun <reified A : Throwable> assertThrows(
   message: String? = "Expected exception ${A::class.java}, but code didn't throw any exception.",
   block: () -> Unit,

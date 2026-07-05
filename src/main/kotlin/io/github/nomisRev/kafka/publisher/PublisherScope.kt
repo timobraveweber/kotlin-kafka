@@ -43,31 +43,36 @@ public interface PublishScope<Key, Value> : CoroutineScope {
    *
    * @param record to be delivered to kafka
    */
+  @IgnorableReturnValue
   public suspend fun publish(record: ProducerRecord<Key, Value>): RecordMetadata
 
   /**
    * Same as [offer], but for an [Iterable]] of [ProducerRecord].
    * @see offer
    */
+  @IgnorableReturnValue
   public suspend fun offer(records: Iterable<ProducerRecord<Key, Value>>) {
-    records.map { offer(it) }
+    records.forEach { offer(it) }
   }
 
   /**
    * Same as [publish], but for an [Iterable]] of [ProducerRecord].
    * @see publish
    */
+  @IgnorableReturnValue
   public suspend fun publish(record: Iterable<ProducerRecord<Key, Value>>): List<RecordMetadata> = coroutineScope {
     record.map { async { publish(it) } }.awaitAll()
   }
 
   /** Alias for `runCatching`, and `publish` except rethrows fatal exceptions */
+  @IgnorableReturnValue
   public suspend fun publishCatching(record: ProducerRecord<Key, Value>): Result<RecordMetadata>
 
   /**
    * Catch first failure of [publish], except fatal exceptions.
    * Alias for `runCatching`, `publish`, and `awaitAll`, except rethrows fatal exceptions
    */
+  @IgnorableReturnValue
   public suspend fun publishCatching(record: Iterable<ProducerRecord<Key, Value>>): Result<List<RecordMetadata>>
 }
 

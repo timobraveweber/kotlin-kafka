@@ -28,8 +28,8 @@ public interface Offset {
    * and including this offset have been processed. All acknowledged offsets are committed if possible
    * when the receiver [Flow] completes or according to [CommitStrategy].
    */
-  public suspend fun acknowledge(): Unit
-  
+  public suspend fun acknowledge()
+
   /**
    * Acknowledges the record associated with this instance and commits all acknowledged offsets.
    * This method suspends until the record has been committed,
@@ -38,5 +38,5 @@ public interface Offset {
    * If commit fails with [RetriableCommitFailedException]
    * the commit operation is retried [ReceiverSettings.maxCommitAttempts] times before this method returns.
    */
-  public suspend fun commit(): Unit
+  public suspend fun commit()
 }

@@ -14,10 +14,6 @@ private const val DEFAULT_MAX_COMMIT_ATTEMPTS = 100
 private val DEFAULT_COMMIT_RETRY_INTERVAL = 500.milliseconds
 private val DEFAULT_COMMIT_INTERVAL = 5.seconds
 
-public enum class AutoOffsetReset(public val value: String) {
-  Earliest("earliest"), Latest("latest"), None("none")
-}
-
 /**
  * A data class that exposes configuration for [KafkaReceiver],
  * and the underlying [org.apache.kafka.clients.consumer.KafkaConsumer].

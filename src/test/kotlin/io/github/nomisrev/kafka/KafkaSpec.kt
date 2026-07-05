@@ -12,8 +12,8 @@ import io.github.nomisRev.kafka.publisher.TransactionalScope
 import io.github.nomisRev.kafka.receiver.AutoOffsetReset
 import io.github.nomisRev.kafka.receiver.KafkaReceiver
 import io.github.nomisRev.kafka.receiver.ReceiverSettings
+import io.github.nomisrev.kafka.receiver.KeyValue
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.count
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
@@ -48,6 +48,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val testIterations: Int =
@@ -112,6 +113,7 @@ abstract class KafkaSpec {
       }
     )
 
+    @IgnorableReturnValue
     suspend fun <A> publishScope(block: suspend TransactionalScope<String, String>.() -> A): A =
       KafkaPublisher(publisherSettings()).use { it.publishScope(block) }
   }
@@ -186,6 +188,7 @@ abstract class KafkaSpec {
     }
   }
 
+  @Suppress("ObjectInheritsException", "unused")
   object Boom : RuntimeException("Boom!") {
     private fun readResolve(): Any = Boom
   }
@@ -193,7 +196,7 @@ abstract class KafkaSpec {
   @JvmName("publishPairsToKafka")
   suspend fun publishToKafka(
     topic: NewTopic,
-    messages: Iterable<Pair<String, String>>,
+    messages: Iterable<KeyValue>,
   ): Unit =
     publishToKafka(messages.map { (key, value) ->
       ProducerRecord(topic.name(), key, value)
@@ -215,14 +218,14 @@ abstract class KafkaSpec {
 
       withConsumer {
         committed(topicPartitions)
-          .mapNotNull { (_, offset) ->
-            offset?.takeIf { it.offset() > 0 }?.offset()
+          .mapNotNull { (value) ->
+            value?.takeIf { it.offset() > 0 }?.offset()
           }.sum()
       }
     }
 
   suspend fun NewTopic.shouldBeEmpty() {
-    val res = withTimeoutOrNull(100) {
+    val res = withTimeoutOrNull(100.milliseconds) {
       KafkaReceiver()
         .receive(name())
         .take(1)
@@ -241,18 +244,6 @@ abstract class KafkaSpec {
         .map { it.value() }
         .toList(),
       listOf(records.value())
-    )
-    shouldBeEmpty()
-  }
-
-  suspend infix fun NewTopic.assertHasRecordCount(records: Int) {
-    assertEquals(
-      KafkaReceiver()
-        .receive(name())
-        .map { record -> record.offset.acknowledge() }
-        .take(records)
-        .count(),
-      records
     )
     shouldBeEmpty()
   }
