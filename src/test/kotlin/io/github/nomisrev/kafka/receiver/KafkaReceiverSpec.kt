@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectIndexed
 import kotlinx.coroutines.flow.count
-import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.flattenConcat
 import kotlinx.coroutines.flow.flattenMerge
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -28,16 +28,17 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
-@ExperimentalCoroutinesApi
-class KafakReceiverSpec : KafkaSpec() {
+data class KeyValue(val key: String, val value: String)
 
+@ExperimentalCoroutinesApi
+class KafkaReceiverSpec : KafkaSpec() {
   val count = 1000
   val lastIndex = count - 1
   fun produced(
     startIndex: Int = 0,
     lastIndex: Int = count,
-  ): List<Pair<String, String>> =
-    (startIndex until lastIndex).map { n -> Pair("key-$n", "value->$n") }
+  ): List<KeyValue> =
+    (startIndex until lastIndex).map { n -> KeyValue("key-$n", "value->$n") }
 
   val produced = produced()
 
@@ -49,7 +50,7 @@ class KafakReceiverSpec : KafkaSpec() {
         .receive(topic.name())
         .map { record ->
           yield()
-          Pair(record.key(), record.value())
+          KeyValue(record.key(), record.value())
             .also { record.offset.acknowledge() }
         }.take(count)
         .toSet(),
@@ -64,7 +65,7 @@ class KafakReceiverSpec : KafkaSpec() {
       KafkaReceiver()
         .receive(topic.name())
         .map { record ->
-          Pair(record.key(), record.value())
+          KeyValue(record.key(), record.value())
             .also { record.offset.acknowledge() }
         }.take(count)
         .toSet(),
@@ -103,7 +104,7 @@ class KafakReceiverSpec : KafkaSpec() {
         .receive(topic.name())
         .map { record ->
           yield()
-          Pair(record.key(), record.value())
+          KeyValue(record.key(), record.value())
             .also { record.offset.acknowledge() }
         }.take(count)
         .toSet(),
@@ -137,11 +138,12 @@ class KafakReceiverSpec : KafkaSpec() {
 
     publishToKafka(producerRecords)
 
-    KafkaReceiver()
+    val _ = KafkaReceiver()
       .receive(topic.name())
       .take(count)
       .onEach { it.offset.acknowledge() }
-      .toList().zip(producerRecords) { actual, expected ->
+      .toList()
+      .zip(producerRecords) { actual, expected ->
         assertEquals(actual.key(), expected.key())
         assertEquals(actual.value(), expected.value())
         assertEquals(actual.topic(), topic.name())
@@ -158,7 +160,7 @@ class KafakReceiverSpec : KafkaSpec() {
         .receive(topic.name())
         .map {
           yield()
-          Pair(it.key(), it.value())
+          KeyValue(it.key(), it.value())
         }
 
     assertEquals(
@@ -262,7 +264,7 @@ class KafakReceiverSpec : KafkaSpec() {
     val receiver = KafkaReceiver()
 
     receiver.receiveAutoAck(topic.name())
-      .flatMapConcat { it }
+      .flattenConcat()
       .take(count)
       .collect()
 
@@ -275,7 +277,7 @@ class KafakReceiverSpec : KafkaSpec() {
     val receiver = KafkaReceiver()
 
     receiver.receiveAutoAck(topic.name())
-      .flatMapConcat { it }
+      .flattenConcat()
       .take(count)
       .collect()
 
@@ -286,8 +288,8 @@ class KafakReceiverSpec : KafkaSpec() {
 
     assertEquals(
       receiver.receiveAutoAck(topic.name())
-        .flatMapConcat { it }
-        .map { Pair(it.key(), it.value()) }
+        .flattenConcat()
+        .map { KeyValue(it.key(), it.value()) }
         .take(count)
         .toSet(),
       seconds.toSet()

@@ -16,7 +16,7 @@ import kotlin.time.Duration
 
 /**
  * Typed setting to create a [KafkaPublisher], enforces the required parameters and leaves the rest as [Properties].
- * It forces you to specify the bootstrapServer, and serializers for [K] and [V].
+ * It forces you to specify the bootstrapServer, and serializers for [Key] and [Value].
  * These are the minimum requirements for constructing a valid [KafkaProducer].
  *
  * @param bootstrapServers list of host/port pairs to use for establishing the initial connection to the Kafka cluster. Should be comma separated.

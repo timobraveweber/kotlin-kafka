@@ -107,7 +107,7 @@ private class DefaultKafkaReceiver<K, V>(private val settings: ReceiverSettings<
 
   // Custom [ThreadFactory] to give a more meaningful name: "kotlin-kafka-groupId-counter"
   private class EventThreadFactory(private val groupId: String) : ThreadFactory {
-    override fun newThread(runnable: java.lang.Runnable): Thread =
+    override fun newThread(runnable: Runnable): Thread =
       Thread(runnable, "$PREFIX$groupId-${COUNTER_REFERENCE.incrementAndGet()}")
   }
 }

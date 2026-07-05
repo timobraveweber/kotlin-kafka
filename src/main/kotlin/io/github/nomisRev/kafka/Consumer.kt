@@ -9,17 +9,18 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import java.time.Duration
 import java.util.Properties
-import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapConcat
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.runInterruptible
 import org.apache.kafka.clients.ClientDnsLookup
@@ -126,7 +127,7 @@ public fun <K, V> Flow<ConsumerRecord<K, V>>.commitBatchWithin(
   duration: kotlin.time.Duration,
   metadata: ((record: ConsumerRecord<K, V>) -> String)? = null,
 ): Flow<Unit> = kafkaConsumer(settings).flatMapConcat { consumer ->
-  chunked(count, duration).mapNotNull { records ->
+  chunked(count, duration).map { records ->
     val commitAsyncMap = records.offsets(metadata)
     (if (records.isNotEmpty()) consumer.commitAsync(commitAsyncMap) { _, e ->
       if (e != null) throw e
@@ -215,7 +216,7 @@ public fun <K, V> KafkaConsumer<K, V>.subscribeTo(
   timeout: kotlin.time.Duration = 500.milliseconds,
 ): Flow<ConsumerRecord<K, V>> = flow {
   subscribe(listOf(name), listener)
-  val job: Job? = coroutineContext[Job]
+  val job: Job? = currentCoroutineContext()[Job]
   while (true) {
     job?.ensureActive()
     // KotlinX Coroutines catches java.util.InterruptedException,
