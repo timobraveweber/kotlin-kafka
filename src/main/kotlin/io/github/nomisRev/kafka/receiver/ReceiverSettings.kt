@@ -1,7 +1,9 @@
 package io.github.nomisRev.kafka.receiver
 
 import io.github.nomisRev.kafka.NothingDeserializer
+import org.apache.kafka.clients.consumer.Consumer
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.Deserializer
 import java.util.Properties
 import kotlin.time.Duration
@@ -21,6 +23,10 @@ private val DEFAULT_COMMIT_INTERVAL = 5.seconds
  * It forces to specify the required parameters to offer a type-safe API,
  * so it requires [bootstrapServers], [valueDeserializer], and [groupId].
  * All other parameters are configured to the sanest defaults.
+ *
+ * @param createConsumer the way the underlying [Consumer] is created for [KafkaReceiver.receive]
+ *   and [KafkaReceiver.receiveAutoAck]. Overriding it allows decorating the consumer, e.g. to
+ *   customise its pause/resume behaviour, analogous to [io.github.nomisRev.kafka.publisher.PublisherSettings.createProducer].
  */
 public data class ReceiverSettings<K, V>(
   val bootstrapServers: String,
@@ -35,6 +41,8 @@ public data class ReceiverSettings<K, V>(
   val maxDeferredCommits: Int = 0,
   val closeTimeout: Duration = Duration.INFINITE,
   val properties: Properties = Properties(),
+  val createConsumer: suspend (ReceiverSettings<K, V>) -> Consumer<K, V> =
+    { settings -> KafkaConsumer(settings.toProperties(), settings.keyDeserializer, settings.valueDeserializer) },
 ) {
   init {
     require(commitRetryInterval.isPosNonZero()) { "Commit Retry interval must be >= 0 but found $pollTimeout" }
@@ -68,6 +76,8 @@ public fun <V> ReceiverSettings(
   maxDeferredCommits: Int = 0,
   closeTimeout: Duration = Long.MAX_VALUE.nanoseconds,
   properties: Properties = Properties(),
+  createConsumer: suspend (ReceiverSettings<Nothing, V>) -> Consumer<Nothing, V> =
+    { settings -> KafkaConsumer(settings.toProperties(), settings.keyDeserializer, settings.valueDeserializer) },
 ): ReceiverSettings<Nothing, V> =
   ReceiverSettings(
     bootstrapServers,
@@ -81,5 +91,6 @@ public fun <V> ReceiverSettings(
     maxCommitAttempts,
     maxDeferredCommits,
     closeTimeout,
-    properties
+    properties,
+    createConsumer
   )
