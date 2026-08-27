@@ -107,6 +107,33 @@ class KafkaReceiverSpec : KafkaSpec() {
   }
 
   @Test
+  fun `A custom createConsumer is used for receiving with auto-ack`() = withTopic {
+    val messageCount = 10
+    publishToKafka(topic, produced(0, messageCount))
+    val pollCount = AtomicInteger(0)
+    val base = receiverSetting()
+    val settings = base.copy(
+      createConsumer = { s ->
+        val delegate = base.createConsumer(s)
+        object : Consumer<String, String> by delegate {
+          override fun poll(timeout: Duration): ConsumerRecords<String, String> =
+            delegate.poll(timeout).also { pollCount.incrementAndGet() }
+        }
+      }
+    )
+    assertEquals(
+      KafkaReceiver(settings)
+        .receiveAutoAck(topic.name())
+        .flattenConcat()
+        .map { record -> KeyValue(record.key(), record.value()) }
+        .take(messageCount)
+        .toSet(),
+      produced(0, messageCount).toSet()
+    )
+    assertTrue(pollCount.get() > 0, "Expected the decorated consumer to be polled")
+  }
+
+  @Test
   fun `Continuous receiving does not overflow stack`() = withTopic {
     val largeCount = 20_000 // when it _was_ overflowing stack, it only took ~4095 messages.
     publishScope {

@@ -27,6 +27,8 @@ private val DEFAULT_COMMIT_INTERVAL = 5.seconds
  * @param createConsumer the way the underlying [Consumer] is created for [KafkaReceiver.receive]
  *   and [KafkaReceiver.receiveAutoAck]. Overriding it allows decorating the consumer, e.g. to
  *   customise its pause/resume behaviour, analogous to [io.github.nomisRev.kafka.publisher.PublisherSettings.createProducer].
+ *   [KafkaReceiver.withConsumer] does not go through it: it hands out a [KafkaConsumer] rather than
+ *   a [Consumer], so it cannot accept an arbitrary decoration without a breaking signature change.
  */
 public data class ReceiverSettings<K, V>(
   val bootstrapServers: String,
@@ -80,17 +82,17 @@ public fun <V> ReceiverSettings(
     { settings -> KafkaConsumer(settings.toProperties(), settings.keyDeserializer, settings.valueDeserializer) },
 ): ReceiverSettings<Nothing, V> =
   ReceiverSettings(
-    bootstrapServers,
-    NothingDeserializer,
-    valueDeserializer,
-    groupId,
-    autoOffsetReset,
-    commitStrategy,
-    pollTimeout,
-    commitRetryInterval,
-    maxCommitAttempts,
-    maxDeferredCommits,
-    closeTimeout,
-    properties,
-    createConsumer
+    bootstrapServers = bootstrapServers,
+    keyDeserializer = NothingDeserializer,
+    valueDeserializer = valueDeserializer,
+    groupId = groupId,
+    autoOffsetReset = autoOffsetReset,
+    commitStrategy = commitStrategy,
+    pollTimeout = pollTimeout,
+    commitRetryInterval = commitRetryInterval,
+    maxCommitAttempts = maxCommitAttempts,
+    maxDeferredCommits = maxDeferredCommits,
+    closeTimeout = closeTimeout,
+    properties = properties,
+    createConsumer = createConsumer,
   )
