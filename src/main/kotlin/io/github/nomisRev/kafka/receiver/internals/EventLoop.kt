@@ -388,11 +388,14 @@ internal class EventLoop<K, V>(
   private fun commitFailure(commitArgs: CommittableBatch.CommitArgs, exception: Throwable) {
     checkConsumerThread("commitFailure")
     logger.warn("Commit failed", exception)
-    if (
-      !isRetryableCommit(exception) &&
-      consecutiveCommitFailures.incrementAndGet() < settings.maxCommitAttempts
-    ) {
-      logger.debug("Commit failed with exception $exception, zero retries remaining")
+    /* Counting the failure has to happen on the retryable path, otherwise [maxCommitAttempts] is
+     * never reached by the very failures it is meant to bound and they are retried forever.
+     * Mirrors ConsumerEventLoop.CommitEvent.handleFailure in reactor-kafka, where this originates. */
+    val mayRetry =
+      isRetryableCommit(exception) &&
+        consecutiveCommitFailures.incrementAndGet() < settings.maxCommitAttempts
+    if (!mayRetry) {
+      logger.debug("Cannot retry commit, it failed with $exception")
       schedulePollAfterRetrying()
       val continuations = commitArgs.continuations
       if (continuations.isNullOrEmpty()) {

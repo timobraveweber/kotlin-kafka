@@ -7,6 +7,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.MockConsumer
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
@@ -46,7 +48,7 @@ class RebalanceRacingCommitSpec {
 
   @Test
   fun `a commit racing a rebalance is retried instead of failing the receive flow`() = runBlocking {
-    val consumer = failingTheFirstCommitWith(RebalanceInProgressException("commit raced the rebalance"))
+    val consumer = failingCommitsWith(RebalanceInProgressException("commit raced the rebalance"))
     val collecting = collect(consumer)
 
     try {
@@ -65,7 +67,7 @@ class RebalanceRacingCommitSpec {
 
   @Test
   fun `a commit the broker asks to retry is still retried`() = runBlocking {
-    val consumer = failingTheFirstCommitWith(RetriableCommitFailedException("try again"))
+    val consumer = failingCommitsWith(RetriableCommitFailedException("try again"))
     val collecting = collect(consumer)
 
     try {
@@ -83,9 +85,32 @@ class RebalanceRacingCommitSpec {
   }
 
   @Test
+  fun `a commit that keeps racing rebalances gives up after maxCommitAttempts`() = runBlocking {
+    val race = RebalanceInProgressException("commit raced the rebalance")
+    val consumer = failingCommitsWith(race, times = Int.MAX_VALUE)
+    val collecting = collect(consumer, maxCommitAttempts = 3)
+
+    try {
+      /* Retrying is right for as long as the rebalance can still complete, but it has to end:
+       * without a bound a consumer group that never settles keeps a subscription retrying forever
+       * instead of surfacing the failure. */
+      val failure = withTimeoutOrNull(10.seconds) { collecting.flowFailure.await() }
+      assertNotNull(
+        failure,
+        "the receive flow must fail once the attempts are used up, " +
+          "but it was still retrying after ${consumer.attempts} commits"
+      )
+      assertEquals(race::class, failure::class)
+      assertEquals(3, consumer.attempts, "the commit must be attempted exactly maxCommitAttempts times")
+    } finally {
+      collecting.close()
+    }
+  }
+
+  @Test
   fun `a commit failure that will not resolve on its own still fails the receive flow`() = runBlocking {
     val fatal = TopicAuthorizationException("not allowed to commit")
-    val consumer = failingTheFirstCommitWith(fatal)
+    val consumer = failingCommitsWith(fatal)
     val collecting = collect(consumer)
 
     try {
@@ -108,20 +133,21 @@ class RebalanceRacingCommitSpec {
 private const val TOPIC = "commit-race-topic"
 private val PARTITION = TopicPartition(TOPIC, 0)
 
-private fun settings(): ReceiverSettings<String, String> =
+private fun settings(maxCommitAttempts: Int = 100): ReceiverSettings<String, String> =
   ReceiverSettings(
     bootstrapServers = "unused:9092",
     keyDeserializer = StringDeserializer(),
     valueDeserializer = StringDeserializer(),
     groupId = "commit-race-group",
     commitStrategy = CommitStrategy.BySize(1),
-    commitRetryInterval = 50.milliseconds,
+    commitRetryInterval = 20.milliseconds,
+    maxCommitAttempts = maxCommitAttempts,
     closeTimeout = 5.seconds,
   )
 
-/** Fails the first commit with [error], and lets every commit after it succeed. */
-private fun failingTheFirstCommitWith(error: Exception): CommitFailingConsumer =
-  CommitFailingConsumer(error).apply {
+/** Fails the first [times] commits with [error], and lets every commit after them succeed. */
+private fun failingCommitsWith(error: Exception, times: Int = 1): CommitFailingConsumer =
+  CommitFailingConsumer(error, times).apply {
     updateBeginningOffsets(mapOf(PARTITION to 0L))
     schedulePollTask {
       rebalance(listOf(PARTITION))
@@ -129,10 +155,11 @@ private fun failingTheFirstCommitWith(error: Exception): CommitFailingConsumer =
     }
   }
 
-private class CommitFailingConsumer(private val error: Exception) :
+private class CommitFailingConsumer(private val error: Exception, private val times: Int) :
   MockConsumer<String, String>(OffsetResetStrategy.EARLIEST) {
 
-  private val attempts = AtomicInteger(0)
+  private val attempted = AtomicInteger(0)
+  val attempts: Int get() = attempted.get()
   val successfulCommits = CopyOnWriteArrayList<Map<TopicPartition, OffsetAndMetadata>>()
 
   override fun commitAsync(
@@ -140,7 +167,7 @@ private class CommitFailingConsumer(private val error: Exception) :
     callback: OffsetCommitCallback?,
   ) {
     requireNotNull(callback) { "the event loop always commits with a callback" }
-    if (attempts.incrementAndGet() == 1) callback.onComplete(offsets, error)
+    if (attempted.incrementAndGet() <= times) callback.onComplete(offsets, error)
     else {
       successfulCommits += offsets.toMap()
       callback.onComplete(offsets, null)
@@ -161,7 +188,7 @@ private class Collecting(
   }
 }
 
-private fun collect(consumer: MockConsumer<String, String>): Collecting {
+private fun collect(consumer: MockConsumer<String, String>, maxCommitAttempts: Int = 100): Collecting {
   /* The event loop asserts that it runs on a thread named like the library's own dispatcher. */
   val dispatcher = Executors.newSingleThreadExecutor { runnable ->
     Thread(runnable, "kotlin-kafka-commit-race-group")
@@ -172,7 +199,7 @@ private fun collect(consumer: MockConsumer<String, String>): Collecting {
   val job = scope.launch {
     val loop = EventLoop(
       topicNames = setOf(TOPIC),
-      settings = settings(),
+      settings = settings(maxCommitAttempts),
       consumer = consumer,
       scope = scope,
       outerContext = currentCoroutineContext(),
